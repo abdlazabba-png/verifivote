@@ -13,3 +13,19 @@ public/tesseract/
 # build/deploy artifacts derived from it.
 .amplify/
 amplify_outputs*.json
+
+# ================= hardened additions =================
+# ---- Secrets & credentials (NEVER COMMIT) ----
+.env
+.env.*
+!.env.example
+*.local
+serviceAccountKey.json
+serviceAccount*.json
+service-account*.json
+*credentials*.json
+*.pem
+*.p12
+*.key
+.aws/
+aws-exports.js

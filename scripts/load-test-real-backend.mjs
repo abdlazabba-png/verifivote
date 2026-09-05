@@ -16,6 +16,14 @@
 //
 // Run with: node scripts/load-test-real-backend.mjs
 // Needs AWS credentials configured (same ones `npx ampx sandbox` uses).
+//
+// The sandbox (`npx ampx sandbox`) and the deployed pipeline-deploy backend
+// each get their own "Submission-*" DynamoDB table in the same AWS
+// account/region (see PILOT_READINESS.md), so auto-detection only works
+// while exactly one exists. Once both are deployed, point this at the
+// right one explicitly:
+//   node scripts/load-test-real-backend.mjs --table Submission-abc123-NONE
+//   SUBMISSION_TABLE_NAME=Submission-abc123-NONE node scripts/load-test-real-backend.mjs
 
 import { randomUUID } from 'node:crypto';
 import { DynamoDBClient, ListTablesCommand } from '@aws-sdk/client-dynamodb';
@@ -30,11 +38,32 @@ const STATE_CODE = 'GM';
 const client = new DynamoDBClient({ region: REGION });
 const docClient = DynamoDBDocumentClient.from(client);
 
+function tableNameFromArgs() {
+  const flagIndex = process.argv.indexOf('--table');
+  if (flagIndex !== -1 && process.argv[flagIndex + 1]) {
+    return process.argv[flagIndex + 1];
+  }
+  return process.env.SUBMISSION_TABLE_NAME || null;
+}
+
 async function findSubmissionTableName() {
+  const explicit = tableNameFromArgs();
+  if (explicit) {
+    return explicit;
+  }
+
   const { TableNames } = await client.send(new ListTablesCommand({}));
   const matches = (TableNames || []).filter((name) => name.startsWith('Submission-'));
-  if (matches.length !== 1) {
-    throw new Error(`Expected exactly one "Submission-*" table, found: ${matches.join(', ') || '(none)'}`);
+  if (matches.length === 0) {
+    throw new Error('No "Submission-*" table found in this account/region.');
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `Found ${matches.length} "Submission-*" tables — sandbox and the deployed backend each have their own ` +
+        `(see PILOT_READINESS.md). Re-run with one of:\n` +
+        matches.map((name) => `  --table ${name}`).join('\n') +
+        `\nor set SUBMISSION_TABLE_NAME.`
+    );
   }
   return matches[0];
 }
